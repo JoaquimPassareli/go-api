@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -14,40 +15,86 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var rp *repository.PessoaRepository
-var rp2 *repository.CarroRepository
+var pessoaRepo *repository.PessoaRepository
+var carroRepo *repository.CarroRepository
 
 // ===================== PESSOAS =====================
 
 // GET /pessoas
 func getAllPessoas(c *echo.Context) error {
-	pessoas, err := rp.Read()
+	pessoas, err := pessoaRepo.Read()
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Erro ao buscar pessoas",
 		})
 	}
-	return c.JSON(http.StatusOK, pessoas)
-}
 
-// GET /pessoas/:doc
-func getPessoa(c *echo.Context) error {
-	docParam := c.Param("doc")
-	doc, err := strconv.Atoi(docParam)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "doc inválido",
+	response := []models.PessoaResponse{}
+
+	for _, p := range pessoas {
+		carros, _ := carroRepo.ReadByPessoaId(p.ID)
+
+		carrosResponse := []models.CarroResponse{}
+		for _, car := range carros {
+			carrosResponse = append(carrosResponse, models.CarroResponse{
+				ID:       car.ID,
+				Marca:    car.Marca,
+				Modelo:   car.Modelo,
+				Ano:      car.Ano,
+				Cor:      car.Cor,
+				PessoaID: car.PessoaID,
+			})
+		}
+
+		response = append(response, models.PessoaResponse{
+			ID:     p.ID,
+			Nome:   p.Nome,
+			Idade:  p.Idade,
+			Altura: p.Altura,
+			Doc:    p.Doc,
+			Carros: carrosResponse,
 		})
 	}
 
-	p, err := rp.ReadById(doc)
+	return c.JSON(http.StatusOK, response)
+}
+
+// GET /pessoas/:id
+func getPessoaByID(c *echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "ID inválido",
+		})
+	}
+
+	pessoa, err := pessoaRepo.ReadByID(id)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, map[string]string{
 			"error": "Pessoa não encontrada",
 		})
 	}
 
-	return c.JSON(http.StatusOK, p)
+	return c.JSON(http.StatusOK, pessoa)
+}
+
+// GET /pessoas/doc/:doc
+func getPessoaByDoc(c *echo.Context) error {
+	doc, err := strconv.Atoi(c.Param("doc"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Doc inválido",
+		})
+	}
+
+	pessoa, err := pessoaRepo.ReadByDoc(doc)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "Pessoa não encontrada",
+		})
+	}
+
+	return c.JSON(http.StatusOK, pessoa)
 }
 
 // POST /pessoas
@@ -66,8 +113,7 @@ func createPessoa(c *echo.Context) error {
 		})
 	}
 
-	if err := rp.Create(&p); err != nil {
-		log.Println("Erro Create Pessoa:", err)
+	if err := pessoaRepo.Create(&p); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Erro ao criar pessoa",
 		})
@@ -76,86 +122,95 @@ func createPessoa(c *echo.Context) error {
 	return c.JSON(http.StatusCreated, p)
 }
 
-// DELETE /pessoas/:doc
-func deletePessoa(c *echo.Context) error {
-	docParam := c.Param("doc")
-	doc, err := strconv.Atoi(docParam)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "doc inválido",
-		})
-	}
-
-	if err := rp.Delete(doc); err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Erro ao deletar",
-		})
-	}
-
-	return c.JSON(http.StatusOK, map[string]string{
-		"message": "Pessoa deletada",
-	})
-}
-
-// PUT /pessoas/:doc
+// PUT /pessoas/:id
 func updatePessoa(c *echo.Context) error {
-	docParam := c.Param("doc")
-	doc, err := strconv.Atoi(docParam)
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "doc inválido",
+			"error": "ID inválido",
 		})
 	}
 
-	var p models.Pessoa
-	if err := c.Bind(&p); err != nil {
+	var req models.PessoaRequest
+	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "JSON inválido",
 		})
 	}
 
-	p.Doc = doc
+	pessoa := models.Pessoa{
+		ID:     id,
+		Nome:   req.Nome,
+		Idade:  req.Idade,
+		Altura: req.Altura,
+	}
 
-	if err := rp.Update(&p); err != nil {
+	if err := pessoaRepo.Update(&pessoa); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Erro ao atualizar",
 		})
 	}
 
-	return c.JSON(http.StatusOK, p)
+	return c.JSON(http.StatusOK, pessoa)
+}
+
+// DELETE /pessoas/:id
+func deletePessoa(c *echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "ID inválido",
+		})
+	}
+
+	carros, err := carroRepo.ReadByPessoaId(id)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Erro ao verificar carros",
+		})
+	}
+
+	if len(carros) > 0 {
+		if err := carroRepo.DeleteByPessoaId(id); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "Erro ao deletar carros",
+			})
+		}
+	}
+
+	if err := pessoaRepo.Delete(id); err != nil {
+		fmt.Println("ERRO AO DELETAR PESSOA:", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
+	}
+	return c.JSON(http.StatusOK, map[string]string{
+		"message": "Pessoa deletada com sucesso (e carros, se existiam)",
+	})
 }
 
 // ===================== CARROS =====================
 
 // GET /carros
 func getAllCarros(c *echo.Context) error {
-	carros, err := rp2.Read()
+	carros, err := carroRepo.Read()
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Erro ao buscar carros",
 		})
 	}
-	return c.JSON(http.StatusOK, carros)
-}
-
-// GET /carros/:id
-func getCarro(c *echo.Context) error {
-	idParam := c.Param("id")
-	id, err := strconv.Atoi(idParam)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "id inválido",
+	var carrosResponse []models.CarroResponse
+	for _, c := range carros {
+		carrosResponse = append(carrosResponse, models.CarroResponse{
+			ID:       c.ID,
+			Marca:    c.Marca,
+			Modelo:   c.Modelo,
+			Ano:      c.Ano,
+			Cor:      c.Cor,
+			PessoaID: c.PessoaID,
 		})
 	}
-
-	carro, err := rp2.ReadById(id)
-	if err != nil {
-		return c.JSON(http.StatusNotFound, map[string]string{
-			"error": "Carro não encontrado",
-		})
-	}
-
-	return c.JSON(http.StatusOK, carro)
+	return c.JSON(http.StatusOK, carrosResponse)
 }
 
 // POST /carros
@@ -168,8 +223,7 @@ func createCarro(c *echo.Context) error {
 		})
 	}
 
-	if err := rp2.Create(&carro); err != nil {
-		log.Println("Erro Create Carro:", err)
+	if err := carroRepo.Create(&carro); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Erro ao criar carro",
 		})
@@ -180,17 +234,16 @@ func createCarro(c *echo.Context) error {
 
 // DELETE /carros/:id
 func deleteCarro(c *echo.Context) error {
-	idParam := c.Param("id")
-	id, err := strconv.Atoi(idParam)
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "id inválido",
+			"error": "ID inválido",
 		})
 	}
 
-	if err := rp2.Delete(id); err != nil {
+	if err := carroRepo.Delete(id); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Erro ao deletar",
+			"error": "Erro ao deletar carro",
 		})
 	}
 
@@ -199,69 +252,35 @@ func deleteCarro(c *echo.Context) error {
 	})
 }
 
-// PUT /carros/:id
-func updateCarro(c *echo.Context) error {
-	idParam := c.Param("id")
-	id, err := strconv.Atoi(idParam)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "id inválido",
-		})
-	}
-
-	var carro models.Carro
-	if err := c.Bind(&carro); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "JSON inválido",
-		})
-	}
-
-	carro.ID = id
-
-	if err := rp2.Update(&carro); err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Erro ao atualizar",
-		})
-	}
-
-	return c.JSON(http.StatusOK, carro)
-}
-
 // ===================== MAIN =====================
 
 func main() {
 	e := echo.New()
 
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"http://localhost:5173"},
-		AllowMethods: []string{"GET", "POST", "PUT", "DELETE"},
+		AllowOrigins: []string{"*"}, // Ou coloque seu http://localhost:5173
+		AllowMethods: []string{http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete},
 	}))
-
-	e.Use(middleware.RequestLogger())
 	e.Use(middleware.Recover())
 
 	db := database.InitDB()
 
-	rp = repository.NewPessoaRepository(db)
-	rp2 = repository.NewCarroRepository(db)
+	pessoaRepo = repository.NewPessoaRepository(db)
+	carroRepo = repository.NewCarroRepository(db)
 
 	// Rotas Pessoas
 	e.GET("/pessoas", getAllPessoas)
-	e.GET("/pessoas/:doc", getPessoa)
+	e.GET("/pessoas/:id", getPessoaByID)
+	e.GET("/pessoas/doc/:doc", getPessoaByDoc)
 	e.POST("/pessoas", createPessoa)
-	e.DELETE("/pessoas/:doc", deletePessoa)
-	e.PUT("/pessoas/:doc", updatePessoa)
+	e.PUT("/pessoas/:id", updatePessoa)
+	e.DELETE("/pessoas/:id", deletePessoa)
 
 	// Rotas Carros
 	e.GET("/carros", getAllCarros)
-	e.GET("/carros/:id", getCarro)
 	e.POST("/carros", createCarro)
 	e.DELETE("/carros/:id", deleteCarro)
-	e.PUT("/carros/:id", updateCarro)
 
 	log.Println("🚀 Servidor rodando em http://localhost:8080")
-
-	if err := e.Start(":8080"); err != nil {
-		log.Fatal(err)
-	}
+	e.Start(":8080")
 }
