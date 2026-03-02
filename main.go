@@ -215,12 +215,21 @@ func getAllCarros(c *echo.Context) error {
 
 // POST /carros
 func createCarro(c *echo.Context) error {
-	var carro models.Carro
+	var req models.CarroRequest
 
-	if err := c.Bind(&carro); err != nil {
+	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "JSON inválido",
 		})
+	}
+
+	// converter request → model
+	carro := models.Carro{
+		Marca:    req.Marca,
+		Modelo:   req.Modelo,
+		Ano:      req.Ano,
+		Cor:      req.Cor,
+		PessoaID: req.PessoaID, // se ainda for ponteiro
 	}
 
 	if err := carroRepo.Create(&carro); err != nil {
@@ -230,6 +239,44 @@ func createCarro(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, carro)
+}
+
+func updateCarro(c *echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "ID inválido",
+		})
+	}
+	var req models.CarroRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "JSON inválido",
+		})
+	}
+
+	pessoa, err := pessoaRepo.ReadByDoc(*req.PessoaDoc)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Pessoa não encontrada com esse DOC",
+		})
+	}
+
+	carro := models.Carro{
+		ID:       id,
+		Marca:    req.Marca,
+		Modelo:   req.Modelo,
+		Ano:      req.Ano,
+		Cor:      req.Cor,
+		PessoaID: &pessoa.ID,
+	}
+
+	if err := carroRepo.Update(id, &carro); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Erro ao atualizar carro",
+		})
+	}
+	return c.JSON(http.StatusOK, carro)
 }
 
 // DELETE /carros/:id
@@ -278,6 +325,7 @@ func main() {
 
 	// Rotas Carros
 	e.GET("/carros", getAllCarros)
+	e.PUT("/carros/:id", updateCarro)
 	e.POST("/carros", createCarro)
 	e.DELETE("/carros/:id", deleteCarro)
 

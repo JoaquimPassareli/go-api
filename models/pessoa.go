@@ -34,18 +34,20 @@ type Carro struct {
 }
 
 type CarroRequest struct {
-	Marca    string `json:"marca"`
-	Modelo   string `json:"modelo"`
-	Ano      int    `json:"ano"`
-	Cor      string `json:"cor"`
-	PessoaID *int   `json:"pessoaId"`
+	Marca     string `json:"marca"`
+	Modelo    string `json:"modelo"`
+	Ano       int    `json:"ano"`
+	Cor       string `json:"cor"`
+	PessoaDoc *int   `json:"pessoaDoc"`
+	PessoaID  *int   `json:"pessoaId"`
 }
 
 type CarroResponse struct {
-	ID       int    `json:"id"`
-	Marca    string `json:"marca"`
-	Modelo   string `json:"modelo"`
-	Ano      int    `json:"ano"`
-	Cor      string `json:"cor"`
-	PessoaID *int   `json:"pessoaId"`
+	ID        int    `json:"id"`
+	Marca     string `json:"marca"`
+	Modelo    string `json:"modelo"`
+	Ano       int    `json:"ano"`
+	Cor       string `json:"cor"`
+	Pessoadoc *int   `json:"pessoaDoc"`
+	PessoaID  *int   `json:"pessoaId"`
 }
