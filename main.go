@@ -17,6 +17,7 @@ import (
 
 var pessoaRepo *repository.PessoaRepository
 var carroRepo *repository.CarroRepository
+var enderecoRepo *repository.EnderecoRepository
 
 // ===================== PESSOAS =====================
 
@@ -33,6 +34,7 @@ func getAllPessoas(c *echo.Context) error {
 
 	for _, p := range pessoas {
 		carros, _ := carroRepo.ReadByPessoaId(p.ID)
+		enderecos, _ := enderecoRepo.ReadByPessoaId(p.ID) // ← adiciona isso
 
 		carrosResponse := []models.CarroResponse{}
 		for _, car := range carros {
@@ -46,13 +48,27 @@ func getAllPessoas(c *echo.Context) error {
 			})
 		}
 
+		enderecosResponse := []models.EnderecoResponse{}
+		for _, e := range enderecos {
+			enderecosResponse = append(enderecosResponse, models.EnderecoResponse{
+				ID:     e.ID,
+				Cep:    e.Cep,
+				Bairro: e.Bairro,
+				Rua:    e.Rua,
+				Numero: e.Numero,
+				Cidade: e.Cidade,
+				Estado: e.Estado,
+			})
+		}
+
 		response = append(response, models.PessoaResponse{
-			ID:     p.ID,
-			Nome:   p.Nome,
-			Idade:  p.Idade,
-			Altura: p.Altura,
-			Doc:    p.Doc,
-			Carros: carrosResponse,
+			ID:        p.ID,
+			Nome:      p.Nome,
+			Idade:     p.Idade,
+			Altura:    p.Altura,
+			Doc:       p.Doc,
+			Carros:    carrosResponse,
+			Enderecos: enderecosResponse, // ← adiciona isso
 		})
 	}
 
@@ -299,6 +315,151 @@ func deleteCarro(c *echo.Context) error {
 	})
 }
 
+// ===================== ENDEREÇOS =====================
+
+func getAllEnderecos(c *echo.Context) error {
+	enderecos, err := enderecoRepo.Read()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Erro ao buscar endereços",
+		})
+	}
+
+	response := []models.EnderecoResponse{}
+	for _, e := range enderecos {
+		var pessoaDoc int
+		if e.PessoaID != nil {
+			pessoa, err := pessoaRepo.ReadByID(*e.PessoaID)
+			if err == nil {
+				pessoaDoc = pessoa.Doc
+			}
+		}
+
+		response = append(response, models.EnderecoResponse{
+			ID:        e.ID,
+			Cep:       e.Cep,
+			Bairro:    e.Bairro,
+			Rua:       e.Rua,
+			Numero:    e.Numero,
+			Cidade:    e.Cidade,
+			Estado:    e.Estado,
+			PessoaDoc: &pessoaDoc,
+		})
+	}
+	return c.JSON(http.StatusOK, response)
+}
+
+func getEnderecosByPessoaId(c *echo.Context) error {
+	pessoaId, err := strconv.Atoi(c.Param("pessoaId"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "ID de pessoa inválido",
+		})
+	}
+	enderecos, err := enderecoRepo.ReadByPessoaId(pessoaId)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Erro ao buscar endereços",
+		})
+	}
+
+	return c.JSON(http.StatusOK, enderecos)
+}
+
+func createEndereco(c *echo.Context) error {
+	var req models.EnderecoRequest
+
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "JSON inválido",
+		})
+	}
+
+	fmt.Println("PessoaDoc recebido:", req.PessoaDoc)
+
+	pessoa, err := pessoaRepo.ReadByDoc(req.PessoaDoc)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "Pessoa não encontrada com esse documento",
+		})
+	}
+
+	endereco := models.Endereco{
+		Cep:      req.Cep,
+		Bairro:   req.Bairro,
+		Rua:      req.Rua,
+		Numero:   req.Numero,
+		Cidade:   req.Cidade,
+		Estado:   req.Estado,
+		PessoaID: &pessoa.ID,
+	}
+
+	if err := enderecoRepo.Create(&endereco); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(http.StatusCreated, endereco)
+}
+
+func updateEndereco(c *echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "ID inválido",
+		})
+	}
+	var req models.EnderecoRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "JSON inválido",
+		})
+	}
+
+	pessoa, err := pessoaRepo.ReadByDoc(req.PessoaDoc)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{
+			"error": "Pessoa não encontrada com esse documento",
+		})
+	}
+
+	endereco := models.Endereco{
+		ID:       id,
+		Cep:      req.Cep,
+		Bairro:   req.Bairro,
+		Rua:      req.Rua,
+		Numero:   req.Numero,
+		Cidade:   req.Cidade,
+		Estado:   req.Estado,
+		PessoaID: &pessoa.ID,
+	}
+
+	if err := enderecoRepo.Update(id, &endereco); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Erro ao atualizar endereço",
+		})
+	}
+	return c.JSON(http.StatusOK, endereco)
+}
+
+func deleteEndereco(c *echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "ID inválido",
+		})
+	}
+	if err := enderecoRepo.Delete(id); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Erro ao deletar endereço",
+		})
+	}
+	return c.JSON(http.StatusOK, map[string]string{
+		"message": "Endereço deletado",
+	})
+}
+
 // ===================== MAIN =====================
 
 func main() {
@@ -314,6 +475,7 @@ func main() {
 
 	pessoaRepo = repository.NewPessoaRepository(db)
 	carroRepo = repository.NewCarroRepository(db)
+	enderecoRepo = repository.NewEnderecoRepository(db)
 
 	// Rotas Pessoas
 	e.GET("/pessoas", getAllPessoas)
@@ -322,6 +484,13 @@ func main() {
 	e.POST("/pessoas", createPessoa)
 	e.PUT("/pessoas/:id", updatePessoa)
 	e.DELETE("/pessoas/:id", deletePessoa)
+
+	// Rotas Endereços
+	e.GET("/enderecos", getAllEnderecos)
+	e.GET("/enderecos/pessoa/:pessoaId", getEnderecosByPessoaId)
+	e.POST("/enderecos", createEndereco)
+	e.PUT("/enderecos/:id", updateEndereco)
+	e.DELETE("/enderecos/:id", deleteEndereco)
 
 	// Rotas Carros
 	e.GET("/carros", getAllCarros)

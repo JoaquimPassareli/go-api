@@ -16,12 +16,13 @@ type PessoaRequest struct {
 }
 
 type PessoaResponse struct {
-	ID     int             `json:"id"`
-	Nome   string          `json:"nome"`
-	Idade  int             `json:"idade"`
-	Altura float64         `json:"altura"`
-	Doc    int             `json:"doc"`
-	Carros []CarroResponse `json:"carros"`
+	ID        int                `json:"id"`
+	Nome      string             `json:"nome"`
+	Idade     int                `json:"idade"`
+	Altura    float64            `json:"altura"`
+	Doc       int                `json:"doc"`
+	Carros    []CarroResponse    `json:"carros"`
+	Enderecos []EnderecoResponse `json:"enderecos"`
 }
 
 type Carro struct {
